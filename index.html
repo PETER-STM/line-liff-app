@@ -3,109 +3,115 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>內部資料上傳控制台</title>
+    <title>活動體驗紀錄</title>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; background-color: #f4f5f7; }
-       .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        h2 { color: #333; font-size: 20px; margin-top: 0; }
-       .form-group { margin-bottom: 15px; }
+        body { font-family: sans-serif; padding: 20px; background-color: #f4f5f7; text-align: center; }
+       .container { background-color: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); max-width: 500px; margin: auto; }
+       .hidden { display: none; }
+        /* 表單樣式 */
+       .form-group { margin-bottom: 15px; text-align: left; }
         label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
-        input[type="file"], textarea { width: 100%; box-sizing: border-box; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        input[type="file"], textarea { width: 100%; box-sizing: border-box; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
         textarea { height: 100px; resize: none; }
         button { width: 100%; padding: 12px; background-color: #00B900; color: white; border: none; border-radius: 5px; font-size: 16px; font-weight: bold; cursor: pointer; }
-        button:disabled { background-color: #ccc; cursor: not-allowed; }
-        #status { margin-top: 15px; color: #666; font-size: 14px; text-align: center; }
+        button:disabled { background-color: #ccc; }
+        #status { margin-top: 15px; color: #666; font-size: 14px; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2>📸 票券與備註上傳</h2>
-        <form id="uploadForm">
-            <div class="form-group">
-                <label for="imageFile">1. 選擇照片 (實體票券或合照)：</label>
-                <input type="file" id="imageFile" name="imageFile" accept="image/*" required>
-            </div>
-            <div class="form-group">
-                <label for="memo">2. 手打備註 (例：大雅、弟弟很活潑)：</label>
-                <textarea id="memo" name="memo" placeholder="請輸入您的客製化觀察..."></textarea>
-            </div>
-            <button type="submit" id="submitBtn" disabled>系統載入中...</button>
-        </form>
-        <div id="status">正在驗證您的身分...</div>
+        <div id="customer-view" class="hidden">
+            <h2>🎉 感謝您的參與！</h2>
+            <p>您的體驗券資料已安全存檔。</p>
+            <p>期待下次活動再見！</p>
+            <img src="https://via.placeholder.com/150?text=Thank+You" alt="Card" style="margin-top:20px; width:100%; border-radius:8px;">
+        </div>
+
+        <div id="admin-view" class="hidden">
+            <h2>📸 內部紀錄上傳</h2>
+            <form id="uploadForm">
+                <div class="form-group">
+                    <label for="imageFile">1. 拍攝票券或合照：</label>
+                    <input type="file" id="imageFile" name="imageFile" accept="image/*" required>
+                </div>
+                <div class="form-group">
+                    <label for="memo">2. 客製化備註 (例：大雅、弟弟活潑)：</label>
+                    <textarea id="memo" name="memo" placeholder="請輸入觀察備註..."></textarea>
+                </div>
+                <button type="submit" id="submitBtn">上傳並同步行事曆</button>
+            </form>
+        </div>
+        
+        <div id="status">正在驗證身分...</div>
     </div>
 
     <script>
-        // 👉 步驟 A：替換成您剛剛在 LINE Developers 取得的 LIFF ID
+        // ----------------------------------------------------
+        // 👉 設定區
+        // ----------------------------------------------------
         const LIFF_ID = "2010021149-mNExKmlq"; 
+        const MAKE_WEBHOOK_URL = "https://hook.eu2.make.com/wncbfc9h1etfg23onskwq2gqclki8ivu";
         
-        // 👉 步驟 B：替換成我們之後要在 Make.com 建立的 Webhook URL
-        const MAKE_WEBHOOK_URL = "YOUR_MAKE_WEBHOOK_URL";
+        // ⚠️ 重要：請在此填入您的 User ID (U 開頭的那串長字串)
+        const ADMIN_USER_ID = "Ueac8b9db42546839de84a6b623cc7174"; 
 
-        let userId = "";
-
-        // 初始化 LIFF
+        // ----------------------------------------------------
+        // 👉 邏輯區
+        // ----------------------------------------------------
         async function initializeLiff() {
             try {
                 await liff.init({ liffId: LIFF_ID });
                 if (!liff.isLoggedIn()) {
                     liff.login();
                 } else {
-                    // 獲取使用者資料以驗證身分
                     const profile = await liff.getProfile();
-                    userId = profile.userId;
+                    const statusDiv = document.getElementById('status');
                     
-                    // 驗證成功後，解鎖提交按鈕
-                    document.getElementById('submitBtn').disabled = false;
-                    document.getElementById('submitBtn').innerText = "上傳並同步至行事曆";
-                    document.getElementById('status').innerText = `管理員已驗證：${profile.displayName}`;
+                    // 【關鍵判斷】檢查點擊者是否為您本人
+                    if (profile.userId === ADMIN_USER_ID) {
+                        document.getElementById('admin-view').classList.remove('hidden');
+                        statusDiv.innerText = `管理員模式：${profile.displayName}`;
+                    } else {
+                        document.getElementById('customer-view').classList.remove('hidden');
+                        statusDiv.innerText = ""; // 對家長隱藏狀態文字
+                    }
                 }
             } catch (err) {
-                document.getElementById('status').innerText = "LIFF 初始化失敗，請確認 LIFF ID 是否正確。";
+                document.getElementById('status').innerText = "系統初始化失敗。";
             }
         }
 
-        // 啟動初始化
         initializeLiff();
 
-        // 處理表單的提交動作
+        // 處理上傳
         document.getElementById('uploadForm').addEventListener('submit', async (e) => {
-            e.preventDefault(); // 阻止網頁預設的重新載入跳轉
-
+            e.preventDefault();
             const submitBtn = document.getElementById('submitBtn');
             const statusDiv = document.getElementById('status');
 
-            // 改變按鈕狀態，避免重複點擊
             submitBtn.disabled = true;
-            submitBtn.innerText = "上傳中，請稍候...";
-            statusDiv.innerText = "正在將資料安全傳送至自動化中台...";
+            submitBtn.innerText = "傳送中...";
 
-            // 將表單內的圖片與文字打包成 FormData 格式
             const formData = new FormData(e.target);
-            
-            // 偷偷將您的 User ID 一併送出，讓後台確認這是「管理員」送來的資料，不是客人的亂按
-            formData.append('userId', userId); 
+            formData.append('adminId', ADMIN_USER_ID);
 
             try {
-                // 將資料 POST 到 Make.com 的 Webhook
                 const response = await fetch(MAKE_WEBHOOK_URL, {
                     method: 'POST',
                     body: formData
                 });
 
                 if (response.ok) {
-                    statusDiv.innerText = "✅ 上傳成功！系統正在為您排程...";
-                    // 成功後，延遲 1.5 秒自動關閉這個 LIFF 網頁，讓您回到 LINE 聊天室
-                    setTimeout(() => {
-                        liff.closeWindow();
-                    }, 1500);
+                    statusDiv.innerText = "✅ 同步成功！";
+                    setTimeout(() => { liff.closeWindow(); }, 1500);
                 } else {
-                    throw new Error(`伺服器回應異常`);
+                    throw new Error();
                 }
             } catch (error) {
-                statusDiv.innerText = "❌ 傳送失敗，請檢查網路連線。";
+                statusDiv.innerText = "❌ 傳送失敗，請檢查網路。";
                 submitBtn.disabled = false;
-                submitBtn.innerText = "重新嘗試上傳";
+                submitBtn.innerText = "重新上傳";
             }
         });
     </script>
